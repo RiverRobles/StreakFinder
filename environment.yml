@@ -1,0 +1,12 @@
+name: streaking_tinder
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy>=1.24
+  - pandas>=2.1
+  - matplotlib>=3.7
+  - pip
+  - pip:
+      - streamlit>=1.33
