@@ -10,3 +10,4 @@ dependencies:
   - pip
   - pip:
       - streamlit>=1.33
+      - streamlit-shortcuts
