@@ -229,7 +229,9 @@ def load_existing_labels_from_drive(dataset_name: str, username: str) -> pd.Data
     else:
         logger.info('Username found, loading information')
         ind = existing_users.index(username)
+        logger.info('Index for user is ', ind)
         labels = ws.col_values(ind+1)
+        logger.info(labels)
         inds, labels = [], []
         for i, label in enumerate(labels[1:]):
             logger.info(label)
