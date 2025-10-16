@@ -445,7 +445,7 @@ try:
 except:
     logger.info('Loading from drive')
     existing_labels_df =load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
-
+    logger.info(existing_labels_df)
 if st.session_state.labels_path:
     logger.info('Loading from local file')
     existing_labels_df = load_existing_labels(st.session_state.labels_path)
