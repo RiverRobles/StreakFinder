@@ -12,6 +12,10 @@ from streamlit_shortcuts import add_shortcuts, shortcut_button
 import gspread
 from google.oauth2.service_account import Credentials
 
+from streamlit.logger import get_logger
+
+logger = get_logger(__name__)
+
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
@@ -255,10 +259,10 @@ def load_existing_labels(path: str) -> pd.DataFrame:
 
 
 def upsert_label(path: str, sample_index: int, label: int, notes: str = "", user_id: str = "", username: str = "") -> None:
-    print('Upserting label')
+    logger.info('Upserting label')
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
     df = load_existing_labels(path)
-    print('Current df is', df)
+    logger.info('Current df is', df)
     ts = datetime.now().isoformat(timespec='seconds')
     if (df['index'] == sample_index).any():
         df.loc[df['index'] == sample_index, ['label', 'username']] = [label, username]
@@ -439,11 +443,11 @@ if num_samples == 0:
 try:
     existing_labels_df
 except:
-    print('Loading from drive')
+    logger.info('Loading from drive')
     existing_labels_df =load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
 
 if st.session_state.labels_path:
-    print('Loading from local file')
+    logger.info('Loading from local file')
     existing_labels_df = load_existing_labels(st.session_state.labels_path)
 
 done_indices = set(existing_labels_df['index'].tolist())
