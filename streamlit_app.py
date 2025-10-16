@@ -436,11 +436,14 @@ if num_samples == 0:
 
 
 # Load existing labels if we have a dataset
+try:
+    existing_labels_df
+except:
+    existing_labels_df =load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
+
 if st.session_state.labels_path:
-    #existing_labels_df = load_existing_labels(st.session_state.labels_path)
-    existing_labels_df = load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
-else:
-    existing_labels_df = pd.DataFrame(columns=['index', 'user_id'])
+    existing_labels_df = load_existing_labels(st.session_state.labels_path)
+
 done_indices = set(existing_labels_df['index'].tolist())
 
 
