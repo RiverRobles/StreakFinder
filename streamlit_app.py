@@ -214,20 +214,25 @@ def load_existing_labels_from_drive(dataset_name: str, username: str) -> pd.Data
     base = os.path.splitext(os.path.basename(dataset_name))[0]
 
     try:
+        logger.info('Loading sheet')
         ws = sh.worksheet(base)
     except gspread.WorksheetNotFound:
+        logger.info('Failed to load sheet')
         df = pd.DataFrame(columns=['index', 'label', 'username'])
         df.to_csv(path, index=False)
         return df
     existing_users = ws.row_values(1)
 
     if username not in existing_users:
+        logger.info(f'Username {username} not found in sheet')
         df = pd.DataFrame(columns=['index', 'label', 'username'])
     else:
+        logger.info('Username found, loading information')
         ind = existing_users.index(username)
         labels = ws.col_values(ind+1)
         inds, labels = [], []
         for i, label in enumerate(labels[1:]):
+            logger.info(label)
             if label == '':
                 pass
             elif label == '0':
@@ -446,6 +451,7 @@ except:
     logger.info('Loading from drive')
     existing_labels_df =load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
     logger.info(existing_labels_df)
+
 if st.session_state.labels_path:
     logger.info('Loading from local file')
     existing_labels_df = load_existing_labels(st.session_state.labels_path)
