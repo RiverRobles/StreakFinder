@@ -198,69 +198,53 @@ def get_username() -> str:
         st.session_state.username = f"User_{get_user_id()}"
     return st.session_state.username
 
-
 def get_labels_path(dataset_name: str, user_id: str, username: str = "") -> str:
     """Generate labels path for this user and dataset"""
     base = os.path.splitext(os.path.basename(dataset_name))[0]
 
     return f"labels/{base}_{username}_labels.csv"
 
-
-def load_existing_labels(path: str) -> pd.DataFrame:
-    if path and os.path.exists(path):
-        try:
-            df = pd.read_csv(path)
-            # Normalize expected columns
-            expected = {'index', 'label'}
-            if not expected.issubset(set(df.columns)):
-                return pd.DataFrame(columns=['index', 'label', 'timestamp', 'notes', 'user_id', 'username'])
-            df = df[['index', 'label'] + [c for c in ['timestamp', 'notes', 'user_id', 'username'] if c in df.columns]]
-            df['index'] = df['index'].astype(int)
-            df['label'] = df['label'].astype(int)
-            return df
-        except Exception:
-            return pd.DataFrame(columns=['index', 'label', 'timestamp', 'notes', 'user_id', 'username'])
-    return pd.DataFrame(columns=['index', 'label', 'timestamp', 'notes', 'user_id', 'username'])
-
-
-def upsert_label(path: str, sample_index: int, label: int, notes: str = "", user_id: str = "", username: str = "") -> None:
-    os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-    df = load_existing_labels(path)
-    ts = datetime.now().isoformat(timespec='seconds')
-    if (df['index'] == sample_index).any():
-        df.loc[df['index'] == sample_index, ['label', 'timestamp', 'notes', 'user_id', 'username']] = [label, ts, notes, user_id, username]
-    else:
-        df = pd.concat([
-            df,
-            pd.DataFrame({'index': [sample_index], 'label': [label], 'timestamp': [ts], 'notes': [notes], 'user_id': [user_id], 'username': [username]})
-        ], ignore_index=True)
-    df.sort_values('index', inplace=True)
-    df.to_csv(path, index=False)
-
-def write_labels_to_drive(dataset_name: str, username: str, num_samples: int):
-    path = get_labels_path(dataset_name, user_id, username)
-    base = os.path.splitext(os.path.basename(dataset_name))[0]
-    
+def load_existing_labels(path: str, dataset_name: str, username: str) -> pd.DataFrame:
     try:
-        ws = sh.worksheet(base)
+        ws = sh.worksheet(dataset_name)
     except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=base, rows=num_samples, cols=100)
+        ws = sh.add_worksheet(title=dataset_name, rows=st.session_state.num_samples, cols=100)
         ws.update_cell(1, 1, 'Index')
 
     existing_users = ws.row_values(1)
 
-    if username not in existing_users:
+    df = pd.DataFrame(columns=['index', 'label', 'username'])
+    if len(existing_users) == 0:
+        ws.update_cell(1, 2, username)
+    elif username not in existing_users:
         ws.update_cell(1, len(existing_users) + 1, username)
-        existing_users = ws.row_values(1)
+    else:
+        ind = existing_users.index(username) + 1
+        col_values = ws.col_values(ind)[1:]
+        for i, value in enumerate(col_values):
+            df = pd.concat([df, pd.DataFrame({'index': [i + 1], 'label':[value], 'username': [username]})], ignore_index=True)
 
-    ind = existing_users.index(username)
-    labels_df = load_existing_labels(path)
+    return df 
 
-    cells_to_update = ws.range(2, ind+1, num_samples+1, ind+1)
-    for i, index in enumerate(labels_df['index'].values):
-        cells_to_update[index].value = str(labels_df['label'][i])
-    ws.update_cells(cells_to_update)
+def upsert_label(path: str, sample_index: int, label: int, notes: str = "", user_id: str = "", username: str = "", dataset_name: str="") -> None:
+    os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+    df = load_existing_labels(path, dataset_name, username)
+    ts = datetime.now().isoformat(timespec='seconds')
+    if (df['index'] == sample_index).any():
+        df.loc[df['index'] == sample_index, ['label', 'timestamp', 'username']] = [label, username]
+    else:
+        df = pd.concat([
+            df,
+            pd.DataFrame({'index': [sample_index], 'label': [label], 'username': [username]})
+        ], ignore_index=True)
+    df.sort_values('index', inplace=True)
+    df.to_csv(path, index=False)
 
+    ws = sh.worksheet(st.session_state.dataset_name)
+    existing_users = ws.row_values(1)
+    ind = existing_users.index(username) + 1
+    
+    ws.update_cell(sample_index + 1, ind, label)
 
 # --------- UI: Plotting ---------
 def plot_sample(xy: np.ndarray, title: str, plot_type: str = "scatter") -> None:
@@ -322,18 +306,10 @@ with st.sidebar:
     selected_preloaded = st.selectbox("Choose a preloaded dataset:", ["None"] + list(preloaded_options.keys()))
     
     st.divider()
-    st.subheader("Or Upload Your Own")
-    uploaded = st.file_uploader("Upload dataset (.npy/.npz/.jsonl/.json/.csv)", type=["npy", "npz", "jsonl", "json", "csv", "txt"])
-    
-    # Determine which dataset to use
     if selected_preloaded != "None" and selected_preloaded in preloaded_options:
         dataset_path = preloaded_options[selected_preloaded]
         dataset_name = selected_preloaded
         st.success(f"Selected: {selected_preloaded}")
-    elif uploaded is not None:
-        dataset_path = uploaded.name
-        dataset_name = uploaded.name
-        st.success(f"Uploaded: {uploaded.name}")
     else:
         dataset_path = None
         dataset_name = None
@@ -364,23 +340,23 @@ if 'labels_path' not in st.session_state:
     st.session_state.labels_path = ''
 
 
+num_samples = 0
 # Load dataset
 if dataset_path and dataset_name:
     try:
-        if uploaded is not None:
-            # Load from uploaded file
-            data = load_dataset(uploaded.getvalue(), uploaded.name)
+        # Load from preloaded dataset
+        if os.path.exists(dataset_path):
+            with open(dataset_path, 'rb') as f:
+                data = load_dataset(f.read(), dataset_path)
         else:
-            # Load from preloaded dataset
-            if os.path.exists(dataset_path):
-                with open(dataset_path, 'rb') as f:
-                    data = load_dataset(f.read(), dataset_path)
-            else:
-                st.error(f"Preloaded dataset not found: {dataset_path}")
-                data = []
-        
+            st.error(f"Preloaded dataset not found: {dataset_path}")
+            data = []
+    
         if data:
             st.session_state.dataset = data
+            dataset: List[np.ndarray] = st.session_state.dataset
+            st.session_state.num_samples = len(dataset)
+            num_samples = st.session_state.num_samples
             st.session_state.dataset_name = dataset_name
             # Generate labels path for this user and dataset
             st.session_state.labels_path = get_labels_path(dataset_name, user_id, username)
@@ -389,24 +365,20 @@ if dataset_path and dataset_name:
     except Exception as e:
         st.error(f"Failed to load dataset: {e}")
 
-
 # Respond to jump control
 if apply_jump:
     st.session_state.index = int(jump_to)
 
-
-dataset: List[np.ndarray] = st.session_state.dataset
-num_samples = len(dataset)
+#dataset: List[np.ndarray] = st.session_state.dataset
+#num_samples = len(dataset)
 
 if num_samples == 0:
     st.info("Upload a dataset to begin.")
     st.stop()
 
-
-
 # Load existing labels if we have a dataset
 if st.session_state.labels_path:
-    existing_labels_df = load_existing_labels(st.session_state.labels_path)
+    existing_labels_df = load_existing_labels(st.session_state.labels_path, st.session_state.dataset_name, st.session_state.username)
 else:
     existing_labels_df = pd.DataFrame(columns=['index', 'label', 'timestamp', 'notes', 'user_id'])
 done_indices = set(existing_labels_df['index'].tolist())
@@ -444,7 +416,7 @@ col_decision_left, col_decision_center, col_decision_right = st.columns([1, 2, 1
 
 with col_decision_left:
     if shortcut_button("Not Streaked ❌", "arrowleft", key="not_streaked_left"):
-        upsert_label(st.session_state.labels_path, current_index, 0, "", user_id, username)
+        upsert_label(st.session_state.labels_path, current_index, 0, "", user_id, username, dataset_name)
         st.session_state.index = min(num_samples - 1, current_index + 1)
         st.rerun()
 
@@ -453,14 +425,9 @@ with col_decision_center:
 
 with col_decision_right:
     if shortcut_button("Streaked ✅", "arrowright", key="streaked_right"):
-        upsert_label(st.session_state.labels_path, current_index, 1, "", user_id, username)
+        upsert_label(st.session_state.labels_path, current_index, 1, "", user_id, username, dataset_name)
         st.session_state.index = min(num_samples - 1, current_index + 1)
         st.rerun()
-
-st.divider()
-
-if st.button("Upload labels to drive"):
-    write_labels_to_drive(st.session_state.dataset_name, username, num_samples)
 
 # Progress and info section
 st.divider()
@@ -482,7 +449,7 @@ with col_info2:
 
 st.divider()
 with st.expander("View/Edit Existing Labels"):
-    df = load_existing_labels(st.session_state.labels_path)
+    df = load_existing_labels(st.session_state.labels_path, st.session_state.dataset_name, st.session_state.username)
     st.dataframe(df, use_container_width=True)
     if not df.empty:
         st.download_button(
