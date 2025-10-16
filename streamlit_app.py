@@ -205,6 +205,37 @@ def get_labels_path(dataset_name: str, user_id: str, username: str = "") -> str:
 
     return f"labels/{base}_{username}_labels.csv"
 
+def load_existing_labels_from_drive(dataset_name: str, username: str) -> pd.DataFrame:
+    path = get_labels_path(dataset_name, '', username)
+    base = os.path.splitext(os.path.basename(dataset_name))[0]
+
+    try:
+        ws = sh.worksheet(base)
+    except gspread.WorksheetNotFound:
+        df = pd.DataFrame(columns=['index', 'label', 'username'])
+        df.to_csv(path, index=False)
+        return df
+    existing_users = ws.row_values(1)
+
+    if username not in existing_users:
+        df = pd.DataFrame(columns=['index', 'label', 'username'])
+    else:
+        ind = existing_users.index(username)
+        labels = ws.col_values(ind+1)
+        inds, labels = [], []
+        for i, label in enumerate(labels[1:]):
+            if label == '':
+                pass
+            elif label == '0':
+                inds.append(i+1)
+                labels.append(0)
+            elif label == '1':
+                inds.append(i+1)
+                labels.append(1)
+        df = pd.DataFrame({'index': inds, 'label': labels, 'username': [username for i in range(len(inds))]})
+
+    df.to_csv(path, index=False)
+    return df
 
 def load_existing_labels(path: str) -> pd.DataFrame:
     if path and os.path.exists(path):
@@ -213,14 +244,14 @@ def load_existing_labels(path: str) -> pd.DataFrame:
             # Normalize expected columns
             expected = {'index', 'label'}
             if not expected.issubset(set(df.columns)):
-                return pd.DataFrame(columns=['index', 'label', 'timestamp', 'notes', 'user_id', 'username'])
-            df = df[['index', 'label'] + [c for c in ['timestamp', 'notes', 'user_id', 'username'] if c in df.columns]]
+                return pd.DataFrame(columns=['index', 'label', 'username'])
+            df = df[['index', 'label'] + [c for c in ['username'] if c in df.columns]]
             df['index'] = df['index'].astype(int)
             df['label'] = df['label'].astype(int)
             return df
         except Exception:
-            return pd.DataFrame(columns=['index', 'label', 'timestamp', 'notes', 'user_id', 'username'])
-    return pd.DataFrame(columns=['index', 'label', 'timestamp', 'notes', 'user_id', 'username'])
+            return pd.DataFrame(columns=['index', 'label', 'username'])
+    return pd.DataFrame(columns=['index', 'label', 'username'])
 
 
 def upsert_label(path: str, sample_index: int, label: int, notes: str = "", user_id: str = "", username: str = "") -> None:
@@ -228,11 +259,11 @@ def upsert_label(path: str, sample_index: int, label: int, notes: str = "", user
     df = load_existing_labels(path)
     ts = datetime.now().isoformat(timespec='seconds')
     if (df['index'] == sample_index).any():
-        df.loc[df['index'] == sample_index, ['label', 'timestamp', 'notes', 'user_id', 'username']] = [label, ts, notes, user_id, username]
+        df.loc[df['index'] == sample_index, ['label', 'username']] = [label, username]
     else:
         df = pd.concat([
             df,
-            pd.DataFrame({'index': [sample_index], 'label': [label], 'timestamp': [ts], 'notes': [notes], 'user_id': [user_id], 'username': [username]})
+            pd.DataFrame({'index': [sample_index], 'label': [label], 'username': [username]})
         ], ignore_index=True)
     df.sort_values('index', inplace=True)
     df.to_csv(path, index=False)
@@ -406,9 +437,10 @@ if num_samples == 0:
 
 # Load existing labels if we have a dataset
 if st.session_state.labels_path:
-    existing_labels_df = load_existing_labels(st.session_state.labels_path)
+    #existing_labels_df = load_existing_labels(st.session_state.labels_path)
+    existing_labels_dfs = load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
 else:
-    existing_labels_df = pd.DataFrame(columns=['index', 'label', 'timestamp', 'notes', 'user_id'])
+    existing_labels_df = pd.DataFrame(columns=['index', 'user_id'])
 done_indices = set(existing_labels_df['index'].tolist())
 
 
