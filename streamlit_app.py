@@ -447,13 +447,6 @@ if num_samples == 0:
     st.stop()
 
 # Load existing labels if we have a dataset
-try:
-    existing_labels_df
-except:
-    logger.info('Loading from drive')
-    existing_labels_df =load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
-    logger.info(existing_labels_df)
-
 if st.session_state.labels_path:
     logger.info('Loading from local file')
     existing_labels_df = load_existing_labels(st.session_state.labels_path)
@@ -507,6 +500,9 @@ with col_decision_right:
         st.rerun()
 
 st.divider()
+
+if st.button("Load labels from drive"):
+    existing_labels_df = load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
 
 if st.button("Upload labels to drive"):
     write_labels_to_drive(st.session_state.dataset_name, username, num_samples)
