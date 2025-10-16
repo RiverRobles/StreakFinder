@@ -512,7 +512,7 @@ with col_info1:
     st.progress(labeled_count / num_samples)
     st.write(f"Labeled: {labeled_count} / {num_samples}")
     if current_index in done_indices:
-        existing_label = int(existing_labels_df.loc[existing_labels_df['index'] == current_index+1, 'label'].iloc[0])
+        existing_label = int(existing_labels_df.loc[existing_labels_df['index'] == current_index, 'label'].iloc[0])
         st.success(f"This sample is already labeled as: {'streaked' if existing_label == 1 else 'not streaked'}")
 
 with col_info2:
