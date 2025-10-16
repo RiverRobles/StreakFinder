@@ -255,8 +255,10 @@ def load_existing_labels(path: str) -> pd.DataFrame:
 
 
 def upsert_label(path: str, sample_index: int, label: int, notes: str = "", user_id: str = "", username: str = "") -> None:
+    print('Upserting label')
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
     df = load_existing_labels(path)
+    print('Current df is', df)
     ts = datetime.now().isoformat(timespec='seconds')
     if (df['index'] == sample_index).any():
         df.loc[df['index'] == sample_index, ['label', 'username']] = [label, username]
@@ -518,7 +520,7 @@ with col_info2:
 st.divider()
 with st.expander("View/Edit Existing Labels"):
     df = load_existing_labels(st.session_state.labels_path)
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width='stretch')
     if not df.empty:
         st.download_button(
             label="Download labels CSV",
