@@ -433,15 +433,15 @@ if num_samples == 0:
     st.info("Upload a dataset to begin.")
     st.stop()
 
-
-
 # Load existing labels if we have a dataset
 try:
     existing_labels_df
 except:
+    print('Loading from drive')
     existing_labels_df =load_existing_labels_from_drive(st.session_state.dataset_name, st.session_state.username)
 
 if st.session_state.labels_path:
+    print('Loading from local file')
     existing_labels_df = load_existing_labels(st.session_state.labels_path)
 
 done_indices = set(existing_labels_df['index'].tolist())
